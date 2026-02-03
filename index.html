@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>イントロクイズ（修正版）</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 400px;
+        }
+        h1 { margin-bottom: 20px; font-size: 24px; color: #444; }
+        
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            font-weight: bold;
+            color: white;
+        }
+        button:active { transform: scale(0.98); }
+        button:hover { opacity: 0.9; }
+        
+        .btn-2sec  { background-color: #3498db; font-size: 18px; padding: 15px; } 
+        .btn-5sec  { background-color: #1abc9c; } 
+        .btn-full  { background-color: #9b59b6; } 
+        .btn-stop  { background-color: #e74c3c; margin-bottom: 20px; } 
+        
+        .btn-answer{ background-color: #f39c12; } 
+        .btn-next  { background-color: #34495e; margin-top: 20px; } 
+
+        .button-group { display: flex; gap: 10px; }
+
+        #answer-display {
+            margin-top: 20px;
+            padding: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #e74c3c;
+            border: 2px dashed #ddd;
+            display: none;
+        }
+        
+        /* エラー表示用 */
+        #error-msg {
+            color: red;
+            font-size: 12px;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎵 イントロクイズ</h1>
+    
+    <audio id="audio-player" onerror="handleError()"></audio>
+
+    <button class="btn-2sec" onclick="playMusic(2)">▶ 2秒だけ再生（超イントロ）</button>
+    
+    <div class="button-group">
+        <button class="btn-5sec" onclick="playMusic(5)">▶ 5秒再生</button>
+        <button class="btn-full" onclick="playMusic(0)">▶ フル再生</button>
+    </div>
+    
+    <button class="btn-stop" onclick="stopMusic()">■ 停止</button>
+
+    <button class="btn-answer" onclick="showAnswer()">正解を見る</button>
+    
+    <div id="answer-display"></div>
+    <div id="error-msg"></div>
+
+    <button class="btn-next" onclick="setNextQuestion()">次の問題へ ➡</button>
+</div>
+
+<script>
+    // ▼ 設定エリア ▼
+    const musicFolder = "intro/"; 
+
+    // ▼ クイズデータ ▼
+
+    const quizList = [
+
+        { file: "シャーデンフロイデ_Schadenfreude.mp3", title: "poplavor - シャーデンフロイデ" },
+        { file: "Gimme ya candy.mp3", title: "Purukichi - Gimme ya candy" },
+        { file: "[BOFXVI] yusi. (w_ Renko) - Freefall (Official Audio).mp3", title: "yusi. - Freefall" },
+        { file: "『不可逆的運命ディストピア』猫足 蕾（CV：芹澤優） _  Lyric Video【ユメステ】.mp3", title: "猫足 蕾 - 不可逆的運命ディストピア" },
+        { file: "My life is mine alone! (feat. ねんね).mp3", title: "Mylta - My life is mine alone!" },
+        { file: "All My Friends.mp3", title: "rejection - All My Friends" },
+        { file: "deep sleep.mp3", title: "Purukichi - deep sleep" },
+        { file: "CutAll.sys.mp3", title: "poplavor - CutAll.sys" },
+        { file: "Moment (feat. mami).mp3", title: "Mysteka - Moment" },
+        { file: "I AM.mp3", title: "poplavor - I AM" },
+        { file: "ゲノモンスター.mp3", title: "ZoeEngine - ゲノモンスター" },
+        { file: "our colors.mp3", title: "Mysteka - our colors" },
+        { file: "ボーイ・ミート・ミー！ (feat. Eye).mp3", title: "lapix & Avans - ボーイ・ミート・ミー！" },
+        { file: "Starry - Dennou.wav.mp3", title: "Nikoi - Starry" },
+        { file: "幽霊 - VOLTA.mp3", title: "VOLTA - 幽霊" },
+        { file: "No weight on me - VOLTA.mp3", title: "VOLTA - No weight on me" },
+        { file: "消える - Dennou.wav.mp3", title: "Purukichi - 消える" },
+        { file: "レサレ - Dennou.wav.mp3", title: "KOUKIISH - レサレ" },
+        { file: "Everything - q'yul.mp3", title: "Purukichi - Everything" },
+
+    ];
+
+    const audio = document.getElementById("audio-player");
+    const answerDisplay = document.getElementById("answer-display");
+    const errorMsg = document.getElementById("error-msg");
+    let currentQuiz = null;
+    let stopTimer = null;
+
+    window.onload = setNextQuestion;
+
+    function setNextQuestion() {
+        // 前の曲を完全に止める
+        stopMusic();
+        
+        answerDisplay.style.display = "none";
+        errorMsg.style.display = "none";
+        
+        const randomIndex = Math.floor(Math.random() * quizList.length);
+        currentQuiz = quizList[randomIndex];
+
+        // ファイルパスをセット
+        audio.src = musicFolder + currentQuiz.file;
+        // load()はブラウザに任せる（明示的に呼ぶとエラーの原因になることがあるため削除）
+    }
+
+    // ★改良版：再生関数★
+    async function playMusic(duration) {
+        // 1. タイマーがあれば消す
+        if (stopTimer) {
+            clearTimeout(stopTimer);
+            stopTimer = null;
+        }
+
+        // 2. 一度停止処理を入れるが、エラーが出ないようにtry-catchで囲む
+        try {
+            audio.pause();
+            // 読み込みが完了している場合のみ時間を0に戻す（読み込み前に0にするとエラーになる）
+            if (audio.readyState > 0) {
+                audio.currentTime = 0;
+            }
+        } catch (e) {
+            console.log("リセット処理中の軽微なエラー（無視可）:", e);
+        }
+
+        // 3. 再生を試みる（Promise処理）
+        try {
+            await audio.play(); // 再生が完了するのを待つ
+
+            // 再生に成功したらタイマーセット
+            if (duration > 0) {
+                stopTimer = setTimeout(() => {
+                    stopMusic();
+                }, duration * 1000);
+            }
+        } catch (err) {
+            console.error("再生エラー:", err);
+            // ユーザーが操作していないのに再生しようとした等のエラー対策
+            errorMsg.innerText = "再生エラー：もう一度ボタンを押してください";
+            errorMsg.style.display = "block";
+        }
+    }
+
+    // ★改良版：停止関数★
+    function stopMusic() {
+        if (stopTimer) {
+            clearTimeout(stopTimer);
+            stopTimer = null;
+        }
+        
+        audio.pause();
+        
+        // 安全に時間を戻す
+        if (audio.readyState > 0) {
+            audio.currentTime = 0;
+        }
+    }
+
+    function showAnswer() {
+        answerDisplay.innerText = "正解： " + currentQuiz.title;
+        answerDisplay.style.display = "block";
+    }
+
+    // ファイルが見つからない場合のエラー処理
+    function handleError() {
+        errorMsg.innerText = "エラー：ファイルが見つかりません (" + currentQuiz.file + ")";
+        errorMsg.style.display = "block";
+    }
+</script>
+
+</body>
+</html>
